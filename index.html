@@ -31,66 +31,92 @@
   </div>
 
 <script>
-  // Paste your Google Apps Script web app URL here 👇
+  // Paste your Google Apps Script URL here
   const API_CHECK_URL = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
   const API_MARK_URL  = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
 
   const resultArea = document.getElementById('resultArea');
   const systemStatus = document.getElementById('systemStatus');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
   let scanner = null;
   let scanning = false;
 
-  function logResult(html, cls){
-    resultArea.innerHTML = `<div class="status ${cls}">${html}</div>`;
+  function logResult(msg, cls) {
+    resultArea.innerHTML = `<div class="status ${cls}">${msg}</div>`;
   }
 
-  async function checkTicket(id){
-    try{
+  async function checkTicket(id) {
+    try {
       const res = await fetch(API_CHECK_URL + '?ticket=' + encodeURIComponent(id));
       return await res.json();
-    }catch(err){return {error:true};}
-  }
-  async function markTicket(id){
-    try{
-      const res = await fetch(API_MARK_URL,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ticket:id})
-      });
-      return await res.json();
-    }catch(err){return {error:true};}
+    } catch (err) { return { error: true }; }
   }
 
-  async function onScan(decodedText){
-    if(!scanning) return;
-    scanning=false;
+  async function markTicket(id) {
+    try {
+      const res = await fetch(API_MARK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket: id })
+      });
+      return await res.json();
+    } catch (err) { return { error: true }; }
+  }
+
+  async function onScan(decodedText) {
+    if (!scanning) return;
+    scanning = false;
     scanner.pause(true);
     const id = decodedText.trim();
     logResult(`Scanned: <strong>${id}</strong><br/>Checking...`, 'info');
-
     const info = await checkTicket(id);
-    if(info.error){ logResult('Network error.', 'fail'); }
-    else if(!info.exists){ logResult(`❌ Ticket <strong>${id}</strong> not found.`, 'fail'); }
-    else if(info.used){ logResult(`⚠️ Ticket <strong>${id}</strong> already used.`, 'fail'); }
-    else{
+    if (info.error) logResult('Network error.', 'fail');
+    else if (!info.exists) logResult(`❌ Ticket <strong>${id}</strong> not found.`, 'fail');
+    else if (info.used) logResult(`⚠️ Ticket <strong>${id}</strong> already used.`, 'fail');
+    else {
       const mark = await markTicket(id);
-      if(mark.ok){ logResult(`✅ Valid — Ticket <strong>${id}</strong> marked as USED.`, 'ok'); }
-      else{ logResult('Error marking ticket.', 'fail'); }
+      if (mark.ok) logResult(`✅ Valid — Ticket <strong>${id}</strong> marked as USED.`, 'ok');
+      else logResult('Error marking ticket.', 'fail');
     }
-    setTimeout(()=>{scanner.resume(); scanning=true;},1000);
+    setTimeout(() => { scanner.resume(); scanning = true; }, 1000);
   }
 
-  document.getElementById('startBtn').onclick = async ()=>{
-    if(!scanner) scanner = new Html5Qrcode("reader");
-    try{
-      await scanner.start({facingMode:"environment"},{fps:10,qrbox:250},onScan);
-      scanning = true; systemStatus.textContent='Camera started — scanning...';
-    }catch(e){systemStatus.textContent='Camera error: '+e;}
-  };
+  // 🧩 Fix: enumerate cameras properly and start with permission prompt
+  startBtn.addEventListener('click', async () => {
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        logResult('❌ No camera found on this device.', 'fail');
+        return;
+      }
+      const cameraId = devices.find(d => d.label.toLowerCase().includes('back'))?.id || devices[0].id;
 
-  document.getElementById('stopBtn').onclick = async ()=>{
-    if(scanner){await scanner.stop();scanner.clear();scanner=null;scanning=false;systemStatus.textContent='Camera stopped';}
-  };
+      scanner = new Html5Qrcode("reader");
+      await scanner.start(
+        { deviceId: { exact: cameraId } },
+        { fps: 10, qrbox: 250 },
+        onScan
+      );
+      scanning = true;
+      systemStatus.textContent = 'Camera started — scanning...';
+    } catch (e) {
+      console.error(e);
+      systemStatus.textContent = 'Camera error: ' + e.message;
+      logResult('⚠️ Failed to start camera — check browser permissions.', 'fail');
+    }
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    if (scanner) {
+      await scanner.stop();
+      scanner.clear();
+      scanner = null;
+      scanning = false;
+      systemStatus.textContent = 'Camera stopped';
+    }
+  });
 </script>
+
 </body>
 </html>
