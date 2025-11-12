@@ -31,14 +31,14 @@
   </div>
 
 <script>
-  // Paste your Google Apps Script URL here
+  // 👇 paste your deployed Apps Script web-app URL
   const API_CHECK_URL = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
   const API_MARK_URL  = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
 
-  const resultArea = document.getElementById('resultArea');
-  const systemStatus = document.getElementById('systemStatus');
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
+  const resultArea = document.getElementById("resultArea");
+  const systemStatus = document.getElementById("systemStatus");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
   let scanner = null;
   let scanning = false;
 
@@ -48,7 +48,7 @@
 
   async function checkTicket(id) {
     try {
-      const res = await fetch(API_CHECK_URL + '?ticket=' + encodeURIComponent(id));
+      const res = await fetch(API_CHECK_URL + "?ticket=" + encodeURIComponent(id));
       return await res.json();
     } catch (err) { return { error: true }; }
   }
@@ -56,8 +56,8 @@
   async function markTicket(id) {
     try {
       const res = await fetch(API_MARK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticket: id })
       });
       return await res.json();
@@ -67,56 +67,62 @@
   async function onScan(decodedText) {
     if (!scanning) return;
     scanning = false;
-    scanner.pause(true);
+    await scanner.pause(true);
+
     const id = decodedText.trim();
-    logResult(`Scanned: <strong>${id}</strong><br/>Checking...`, 'info');
+    logResult(`Scanned: <strong>${id}</strong><br/>Checking...`, "info");
+
     const info = await checkTicket(id);
-    if (info.error) logResult('Network error.', 'fail');
-    else if (!info.exists) logResult(`❌ Ticket <strong>${id}</strong> not found.`, 'fail');
-    else if (info.used) logResult(`⚠️ Ticket <strong>${id}</strong> already used.`, 'fail');
+    if (info.error) logResult("Network error.", "fail");
+    else if (!info.exists) logResult(`❌ Ticket <strong>${id}</strong> not found.`, "fail");
+    else if (info.used) logResult(`⚠️ Ticket <strong>${id}</strong> already used.`, "fail");
     else {
       const mark = await markTicket(id);
-      if (mark.ok) logResult(`✅ Valid — Ticket <strong>${id}</strong> marked as USED.`, 'ok');
-      else logResult('Error marking ticket.', 'fail');
+      if (mark.ok) logResult(`✅ Valid — Ticket <strong>${id}</strong> marked as USED.`, "ok");
+      else logResult("Error marking ticket.", "fail");
     }
-    setTimeout(() => { scanner.resume(); scanning = true; }, 1000);
+
+    setTimeout(() => { scanner.resume(); scanning = true; }, 1200);
   }
 
-  // 🧩 Fix: enumerate cameras properly and start with permission prompt
-  startBtn.addEventListener('click', async () => {
+  // 🟢 Start Camera with guaranteed permission prompt
+  startBtn.addEventListener("click", async () => {
     try {
+      // 1️⃣ Force browser to show permission popup
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (stream) stream.getTracks().forEach(t => t.stop());
+
+      // 2️⃣ List available cameras
       const devices = await Html5Qrcode.getCameras();
       if (!devices || devices.length === 0) {
-        logResult('❌ No camera found on this device.', 'fail');
+        logResult("❌ No camera found on this device.", "fail");
         return;
       }
-      const cameraId = devices.find(d => d.label.toLowerCase().includes('back'))?.id || devices[0].id;
 
+      // prefer rear camera
+      const cameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.id || devices[0].id;
+
+      // 3️⃣ Start html5-qrcode
       scanner = new Html5Qrcode("reader");
-      await scanner.start(
-        { deviceId: { exact: cameraId } },
-        { fps: 10, qrbox: 250 },
-        onScan
-      );
+      await scanner.start({ deviceId: { exact: cameraId } }, { fps: 10, qrbox: 250 }, onScan);
       scanning = true;
-      systemStatus.textContent = 'Camera started — scanning...';
-    } catch (e) {
-      console.error(e);
-      systemStatus.textContent = 'Camera error: ' + e.message;
-      logResult('⚠️ Failed to start camera — check browser permissions.', 'fail');
+      systemStatus.textContent = "Camera started — scanning...";
+    } catch (err) {
+      console.error(err);
+      systemStatus.textContent = "Camera error: " + err.message;
+      logResult("⚠️ Failed to start camera — check browser permissions.", "fail");
     }
   });
 
-  stopBtn.addEventListener('click', async () => {
+  stopBtn.addEventListener("click", async () => {
     if (scanner) {
       await scanner.stop();
       scanner.clear();
       scanner = null;
       scanning = false;
-      systemStatus.textContent = 'Camera stopped';
+      systemStatus.textContent = "Camera stopped";
     }
   });
 </script>
-
 </body>
 </html>
