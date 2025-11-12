@@ -15,9 +15,6 @@
     .fail{background:#fff0f0;border:1px solid #d64545;color:#a00}
     .info{background:#eef3ff;border:1px solid #6b8ef1;color:#1133aa}
   </style>
-
-  <!-- ✅ Load the html5-qrcode library BEFORE anything else -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
 </head>
 
 <body>
@@ -29,9 +26,19 @@
   </div>
   <div id="resultArea"></div>
 
-  <!-- ✅ Custom logic AFTER library -->
+  <!-- ✅ Load the library *before* the main script and ensure it’s finished -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js" defer></script>
+
+  <!-- ✅ Your logic waits until window.onload so Html5Qrcode is guaranteed defined -->
   <script>
-  document.addEventListener("DOMContentLoaded", () => {
+  window.addEventListener("load", () => {
+    console.log("Library check:", typeof Html5Qrcode); // should log "function"
+
+    if (typeof Html5Qrcode === "undefined") {
+      alert("QR library failed to load. Refresh or check internet connection.");
+      return;
+    }
+
     const API_CHECK_URL = "https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec";
     const API_MARK_URL  = "https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec";
 
@@ -51,6 +58,7 @@
         return await res.json();
       }catch(e){return {error:true};}
     }
+
     async function markTicket(id){
       try{
         const res = await fetch(API_MARK_URL,{
@@ -82,7 +90,6 @@
 
     startBtn.addEventListener("click", async () => {
       try{
-        // Force permission popup
         const stream = await navigator.mediaDevices.getUserMedia({ video:true });
         stream.getTracks().forEach(t=>t.stop());
 
