@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Ticket Scanner</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;padding:0;background:#f6f7fb;color:#111}
+    header{padding:12px 16px;background:#0b63d6;color:white}
+    .wrap{max-width:900px;margin:18px auto;padding:12px}
+    #reader{width:100%;max-width:640px;margin:8px auto}
+    .status{margin-top:12px;padding:12px;border-radius:8px}
+    .ok{background:#e6ffef;border:1px solid #0a8a4b;color:#0a8a4b}
+    .fail{background:#fff0f0;border:1px solid #d64545;color:#a00}
+    .info{background:#eef3ff;border:1px solid #6b8ef1;color:#1133aa}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    button{padding:10px 12px;border-radius:8px;border:0;background:#0b63d6;color:white;cursor:pointer}
+  </style>
+  <script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <header><strong>QR Ticket Scanner</strong></header>
+  <div class="wrap">
+    <p class="status info">Status: <span id="systemStatus">Ready — press Start Camera</span></p>
+    <div id="reader"></div>
+    <div class="controls">
+      <button id="startBtn">Start Camera</button>
+      <button id="stopBtn">Stop Camera</button>
+    </div>
+    <div id="resultArea"></div>
+  </div>
+
+<script>
+  // Paste your Google Apps Script web app URL here 👇
+  const API_CHECK_URL = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
+  const API_MARK_URL  = 'https://script.google.com/macros/s/AKfycbxrPVM9DWRQcC9q5RQc_9ETR--4UNR1cltedn04Q4PC3EUt0txHo-jpPutaJCvygIcm/exec';
+
+  const resultArea = document.getElementById('resultArea');
+  const systemStatus = document.getElementById('systemStatus');
+  let scanner = null;
+  let scanning = false;
+
+  function logResult(html, cls){
+    resultArea.innerHTML = `<div class="status ${cls}">${html}</div>`;
+  }
+
+  async function checkTicket(id){
+    try{
+      const res = await fetch(API_CHECK_URL + '?ticket=' + encodeURIComponent(id));
+      return await res.json();
+    }catch(err){return {error:true};}
+  }
+  async function markTicket(id){
+    try{
+      const res = await fetch(API_MARK_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ticket:id})
+      });
+      return await res.json();
+    }catch(err){return {error:true};}
+  }
+
+  async function onScan(decodedText){
+    if(!scanning) return;
+    scanning=false;
+    scanner.pause(true);
+    const id = decodedText.trim();
+    logResult(`Scanned: <strong>${id}</strong><br/>Checking...`, 'info');
+
+    const info = await checkTicket(id);
+    if(info.error){ logResult('Network error.', 'fail'); }
+    else if(!info.exists){ logResult(`❌ Ticket <strong>${id}</strong> not found.`, 'fail'); }
+    else if(info.used){ logResult(`⚠️ Ticket <strong>${id}</strong> already used.`, 'fail'); }
+    else{
+      const mark = await markTicket(id);
+      if(mark.ok){ logResult(`✅ Valid — Ticket <strong>${id}</strong> marked as USED.`, 'ok'); }
+      else{ logResult('Error marking ticket.', 'fail'); }
+    }
+    setTimeout(()=>{scanner.resume(); scanning=true;},1000);
+  }
+
+  document.getElementById('startBtn').onclick = async ()=>{
+    if(!scanner) scanner = new Html5Qrcode("reader");
+    try{
+      await scanner.start({facingMode:"environment"},{fps:10,qrbox:250},onScan);
+      scanning = true; systemStatus.textContent='Camera started — scanning...';
+    }catch(e){systemStatus.textContent='Camera error: '+e;}
+  };
+
+  document.getElementById('stopBtn').onclick = async ()=>{
+    if(scanner){await scanner.stop();scanner.clear();scanner=null;scanning=false;systemStatus.textContent='Camera stopped';}
+  };
+</script>
+</body>
+</html>
